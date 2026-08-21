@@ -578,11 +578,26 @@
     font-size: 11px; letter-spacing: 0.1em; font-weight: 700;
     color: var(--muted); margin: 0 0 9px;
   }
-  .sp-skill { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; }
-  .sp-skilllabel { font-size: 12.5px; width: 86px; flex-shrink: 0; }
-  .sp-bar { flex: 1; min-width: 0; height: 9px; background: #e6e2d7; border-radius: 5px; overflow: hidden; }
-  .sp-bar i { display: block; height: 100%; background: var(--accent); border-radius: 5px; }
-  .sp-skillval { font-size: 12px; color: var(--muted); width: 14px; text-align: right; flex-shrink: 0; }
+  .sp-radar {
+    width: 100%;
+    height: auto;
+    display: block;
+    background: #ffffff;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+  }
+  .sp-rl { font-size: 11px; font-weight: 600; fill: var(--muted); }
+  .sp-rn { font-size: 8px; fill: var(--muted); }
+  .sp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
+  .sp-chip {
+    font-size: 12px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 3px 10px;
+    color: var(--muted);
+  }
+  .sp-chip b { color: var(--ink); font-weight: 600; margin-right: 5px; }
   .sp-detailgroup { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
   .sp-detailhead { font-size: 13px; font-weight: 700; color: var(--accent); margin-bottom: 6px; }
   .sp-detailrow {
@@ -1360,11 +1375,10 @@ function spShowCard(name) {
     let h = '';
     if (p.main && p.main.length) {
       h += '<div class="sp-sectitle">スキル評価</div>';
-      p.main.forEach(([label, v]) => {
-        h += '<div class="sp-skill"><span class="sp-skilllabel">' + spEsc(label) + '</span>'
-          + '<span class="sp-bar"><i style="width:' + (v * 20) + '%"></i></span>'
-          + '<span class="sp-skillval">' + v + '</span></div>';
-      });
+      h += spRadar(p.main);
+      h += '<div class="sp-chips">' + p.main.map(function (kv) {
+        return '<span class="sp-chip"><b>' + spEsc(kv[0]) + '</b>' + kv[1] + '</span>';
+      }).join('') + '</div>';
     }
     (p.groups || []).forEach(([gname, items]) => {
       if (!items.length) return;
@@ -1397,6 +1411,45 @@ function spAreaHtml(areas) {
       + '<div class="sp-arealist">' + byPref[pref].map(spEsc).join('、') + '</div>';
   });
   return h + '</div>';
+}
+
+// 能力の5角形（レーダーチャート）。Excelの図と同じく修理を上にして時計回りに並べる。
+function spRadar(main) {
+  const R = 50, VW = 300, VH = 170, N = main.length;
+  const GREEN = '#93b880', GRID = '#e0dbcd', TXT = '#6b6255';
+  const ang = i => -Math.PI / 2 + 2 * Math.PI * i / N;
+  const pts = vals => vals.map((v, i) => {
+    const r = R * v / 5;
+    return (r * Math.cos(ang(i))).toFixed(1) + ',' + (r * Math.sin(ang(i))).toFixed(1);
+  }).join(' ');
+
+  let g = '';
+  for (let s = 1; s <= 5; s++) {
+    g += '<polygon points="' + pts(new Array(N).fill(s)) + '" fill="none" stroke="' + GRID + '" stroke-width="0.9"/>';
+  }
+  for (let i = 0; i < N; i++) {
+    g += '<line x1="0" y1="0" x2="' + (R * Math.cos(ang(i))).toFixed(1)
+      + '" y2="' + (R * Math.sin(ang(i))).toFixed(1) + '" stroke="' + GRID + '" stroke-width="0.9"/>';
+  }
+
+  let lb = '';
+  main.forEach(function (kv, i) {
+    const ca = Math.cos(ang(i)), sa = Math.sin(ang(i));
+    const anchor = Math.abs(ca) < 0.25 ? 'middle' : (ca > 0 ? 'start' : 'end');
+    const dy = Math.abs(ca) >= 0.25 ? 3.5 : (sa < 0 ? -5 : 11);
+    lb += '<text x="' + ((R + 8) * ca).toFixed(1) + '" y="' + ((R + 8) * sa + dy).toFixed(1)
+      + '" text-anchor="' + anchor + '" class="sp-rl">' + spEsc(kv[0]) + '</text>';
+    const rr = R * kv[1] / 5;
+    lb += '<circle cx="' + (rr * ca).toFixed(1) + '" cy="' + (rr * sa).toFixed(1)
+      + '" r="2.8" fill="' + GREEN + '"/>';
+  });
+
+  return '<svg viewBox="-150 -85 ' + VW + ' ' + VH + '" class="sp-radar" role="img" aria-label="能力の5段階評価">'
+    + g
+    + '<polygon points="' + pts(main.map(kv => kv[1])) + '" fill="rgba(147,184,128,.32)" stroke="'
+    + GREEN + '" stroke-width="2" stroke-linejoin="round"/>'
+    + lb
+    + '<text x="-143" y="78" class="sp-rn">外側が5・中心が0</text></svg>';
 }
 
 function spCloseCard(e) {
