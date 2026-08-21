@@ -807,11 +807,17 @@ let lastTapTime = 0;
 
 detailImg.addEventListener('load', () => {
   natWidth = detailImg.naturalWidth;
+  spFitDetail();
+});
+
+// 画像の初期倍率を決める。画面に出ていない間は幅が 0 なので、後回しにする
+function spFitDetail() {
   const containerW = detailImageWrap.clientWidth - 20;
+  if (containerW <= 0 || !natWidth) { spNeedRedraw = true; return; }
   fitWidth = Math.min(natWidth, containerW);
   curWidth = fitWidth;
   applyZoom();
-});
+}
 
 function applyZoom() {
   detailImg.style.width = curWidth + 'px';
@@ -873,7 +879,27 @@ function moveTooltip(evt) {
 function hideTooltip() { tooltip.classList.remove('show'); }
 
 let currentView = 'overview';
+
+// 地図が画面に出ていない（担当者一覧や検索結果を表示中）とき、
+// 幅・高さが 0 のまま描き直すと viewBox が "0 0 0 0" になって地図が消える。
+// 描けない間は「あとで描く」印だけ立て、地図に戻ったときに描き直す。
+let spNeedRedraw = false;
+function spMapVisible() {
+  const r = mapWrap.getBoundingClientRect();
+  return r.width > 0 && r.height > 0;
+}
+function spRedrawIfNeeded() {
+  if (!spNeedRedraw || !spMapVisible()) return;
+  spNeedRedraw = false;
+  if (currentView === 'overview') renderOverview();
+  else {
+    spFitDetail();
+    if (pendingLabelItems.length) renderHtmlLabels(pendingLabelItems);
+  }
+}
+
 window.addEventListener('resize', () => {
+  if (!spMapVisible()) { spNeedRedraw = true; return; }
   if (currentView === 'overview') renderOverview();
   else if (pendingLabelItems.length) renderHtmlLabels(pendingLabelItems);
 });
@@ -915,6 +941,8 @@ function applyT(t, x, y) { return [t.tx + x*t.scale, t.ty + y*t.scale]; }
 
 function renderOverview() {
   spClearHotspots();
+  // 画面に出ていないときに描くと viewBox が壊れる。地図に戻ったときに描き直す
+  if (typeof spMapVisible === 'function' && !spMapVisible()) { spNeedRedraw = true; return; }
   currentView = 'overview';
   backBtn.classList.remove('show');
   sidebar.classList.remove('show');
@@ -1269,9 +1297,12 @@ function spSwitchTab(tab) {
   document.getElementById('spTabMap').classList.toggle('active', tab === 'map');
   document.getElementById('spTabStaff').classList.toggle('active', tab === 'staff');
   const searching = document.getElementById('spSearchInput').value.trim() !== '';
-  document.querySelector('main').style.display = (tab === 'map' && !searching) ? '' : 'none';
+  const showMap = (tab === 'map' && !searching);
+  document.querySelector('main').style.display = showMap ? '' : 'none';
   document.getElementById('spStaffPanel').classList.toggle('show', tab === 'staff' && !searching);
   document.getElementById('spSearchPanel').classList.toggle('show', searching);
+  // display を戻した直後はまだ大きさが決まっていないので、1コマ待ってから描き直す
+  if (showMap) requestAnimationFrame(spRedrawIfNeeded);
 }
 
 // ---- 検索 ----
