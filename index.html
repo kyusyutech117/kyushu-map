@@ -1429,11 +1429,14 @@ function spRenderStaffList() {
 // ★v10は「試験」。中身は一切変えず、いまの index.html をそのまま落とすだけ。
 // 一覧を描き直すたびに作り直されるので、消えたり重なったりしない。
 function spExportHtml() {
+  const note = spEditedNote();
   return '<div class="sp-export">'
     + '<div class="sp-exhead">書き出し（管理用）</div>'
-    + '<div class="sp-exnote">いまの評価をそのまま書き出します。'
-    + '<b>編集した内容も入ります。</b>落とした index.html を GitHub に上げてください。</div>'
-    + '<button class="sp-exbtn" onclick="spExportSelf(this)">index.html を書き出す</button>'
+    + '<div class="sp-exnote">'
+    + (note ? note + '<br>' : '')
+    + 'いまの評価をまとめて書き出します。<b>直した内容も入ります。</b>'
+    + '落とした index.html を GitHub に上げてください。</div>'
+    + '<button class="sp-exbtn" onclick="spExportSelf(this)">まとめて書き出す</button>'
     + '<div class="sp-exmsg" id="spExportMsg">押すと、ここに結果が出ます。</div>'
     + '</div>';
 }
@@ -1722,6 +1725,35 @@ function spCanEdit(name) {
 
 let spEditName = null;   // いま編集している方
 let spEditBase = null;   // 開いたときの値（「編集前に戻す」で使う）
+// ★v12：直した方のお名前を控えておく。何人ぶん直したかを画面に出すため。
+const spEditedNames = new Set();
+
+// 元の値（アプリを読み込んだときのまま）。ここと比べて「直したかどうか」を判断する。
+const SP_ORIGINAL = {};
+Object.keys(STAFF_PROFILES).forEach(function (n) {
+  const p = STAFF_PROFILES[n];
+  if (p && p.groups) SP_ORIGINAL[n] = p.groups.map(function (g) { return g[1].map(function (it) { return it[1]; }); });
+});
+
+// その方が元と変わっているか
+function spIsEdited(name) {
+  const p = STAFF_PROFILES[name], o = SP_ORIGINAL[name];
+  if (!p || !o) return false;
+  for (let gi = 0; gi < p.groups.length; gi++) {
+    for (let ii = 0; ii < p.groups[gi][1].length; ii++) {
+      if (p.groups[gi][1][ii][1] !== o[gi][ii]) return true;
+    }
+  }
+  return false;
+}
+
+// 何人ぶん直したかの一言（0名なら空）
+function spEditedNote() {
+  const n = spEditedNames.size;
+  if (!n) return '';
+  const names = Array.from(spEditedNames).join('・');
+  return '<b>' + n + '名ぶん直しました</b>（' + spEsc(names) + '）';
+}
 
 function spEditOpen(name) {
   if (!spCanEdit(name)) return;
@@ -1736,10 +1768,25 @@ function spEditOpen(name) {
 }
 
 function spEditClose() {
+  const name = spEditName;
   document.getElementById('spEdit').classList.remove('show');
   document.getElementById('spEdit').innerHTML = '';
   spEditName = null;
   spEditBase = null;
+  if (name) {
+    // 元と変わっていれば控えに入れ、元に戻っていれば控えから外す
+    if (spIsEdited(name)) spEditedNames.add(name); else spEditedNames.delete(name);
+    // ★v12で直した所：カードを描き直さないと、直した値が画面に出ない。
+    //   （データは変わっているのに、五角形も丸の数も古いままだった）
+    spShowCard(name);
+    // 一覧のいちばん下の書き出し欄にも「何名ぶん」を出し直す。
+    // ★タブを切り替えただけでは一覧を描き直さないので、ここで必ず描き直す。
+    //   スクロール位置は元に戻す（憲法 §20.13-7）。
+    const panel = document.getElementById('spStaffPanel');
+    const sc = panel ? panel.scrollTop : 0;
+    spRenderStaffList();
+    if (panel) panel.scrollTop = sc;
+  }
 }
 
 function spEditHtml(name) {
@@ -1749,9 +1796,11 @@ function spEditHtml(name) {
     + '<div class="sp-edtitle">' + spEsc(name) + ' の評価を編集'
     + '<span>言葉を選ぶだけ。五角形は自動で決まります</span></div></div>';
   h += '<div class="sp-edbody">';
-  h += '<div class="sp-ednote">直しても、この端末の画面が変わるだけです。'
-    + '<b>みんなの画面に反映するには、下の「保存して書き出す」で新しい index.html を落として、'
-    + 'GitHub に上げてください。</b></div>';
+  h += '<div class="sp-ednote">'
+    + '<b>何人でも続けて直せます。</b>書き出しは、ぜんぶ直し終わってから<b>1回だけ</b>で結構です。'
+    + '<br>直した内容は、みんなの画面にはまだ出ていません。'
+    + '最後に「まとめて書き出す」で index.html を落として、GitHub に上げてください。'
+    + '<br>★アプリを閉じると、直した内容は消えます。</div>';
   (p.groups || []).forEach(function (g, gi) {
     const gname = g[0], items = g[1], words = spWords(gname);
     h += '<div class="sp-edgname">' + spEsc(gname)
@@ -1768,11 +1817,14 @@ function spEditHtml(name) {
       h += '</select></div>';
     });
   });
-  h += '<div class="sp-edmsg" id="spEdMsg">「保存して書き出す」を押すと、ここに結果が出ます。</div>';
+  const note = spEditedNote();
+  h += '<div class="sp-edmsg" id="spEdMsg">'
+    + (note ? note + '<br>' : '')
+    + '「まとめて書き出す」を押すと、ここに結果が出ます。</div>';
   h += '</div>';
   h += '<div class="sp-edfoot">'
-    + '<button class="sp-edundo" onclick="spEditUndo()">編集前に戻す</button>'
-    + '<button class="sp-edsave" onclick="spEditSave(this)">保存して書き出す</button>'
+    + '<button class="sp-edundo" onclick="spEditUndo()">元の評価に戻す</button>'
+    + '<button class="sp-edsave" onclick="spEditSave(this)">まとめて書き出す</button>'
     + '</div>';
   return h;
 }
@@ -1805,15 +1857,28 @@ function spEditRefresh() {
   });
 }
 
+// ★v12：戻す先を「この画面を開いたとき」から「アプリを開いたとき（元の値）」に変えた。
+//   閉じて開き直すと前の直しが取り消せなくなり、押した人の思いと食い違うため。
+//   取り消せない向きの操作なので、確認を1つ置く（憲法 §2）。
 function spEditUndo() {
-  const p = STAFF_PROFILES[spEditName];
-  if (!p || !spEditBase) return;
+  const name = spEditName;
+  const p = STAFF_PROFILES[name], o = SP_ORIGINAL[name];
+  if (!p || !o) return;
+  if (!spIsEdited(name)) {
+    const m0 = document.getElementById('spEdMsg');
+    if (m0) m0.textContent = 'この方は、まだ直していません。';
+    return;
+  }
+  if (!window.confirm(name + ' さんの評価を、アプリを開いたときの値にすべて戻します。よろしいですか？')) return;
   p.groups.forEach(function (g, gi) {
-    g[1].forEach(function (it, ii) { it[1] = spEditBase[gi][ii]; });
+    g[1].forEach(function (it, ii) { it[1] = o[gi][ii]; });
   });
+  spEditBase = o.map(function (g) { return g.slice(); });
+  spEditedNames.delete(name);
   spEditRefresh();
   const m = document.getElementById('spEdMsg');
-  if (m) m.textContent = '編集前の値に戻しました。';
+  if (m) m.innerHTML = '元の評価に戻しました。'
+    + (spEditedNote() ? '<br>' + spEditedNote() : '');
 }
 
 // ---- 書き出し（v10の仕組みを使うが、目印の間だけを差し替える）----
