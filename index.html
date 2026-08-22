@@ -588,6 +588,33 @@
   }
   .sp-rl { font-size: 11px; font-weight: 600; fill: #e8e8e8; }
   .sp-rn { font-size: 8px; fill: rgba(232, 232, 232, 0.75); }
+  /* 書き出しの試験欄。担当者一覧の「いちばん下」に流し込む（高さを取り合わない） */
+  .sp-export {
+    margin: 18px 2px 4px;
+    padding: 13px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  .sp-exhead {
+    font-size: 11px; letter-spacing: 0.1em; font-weight: 700;
+    color: var(--muted); margin-bottom: 6px;
+  }
+  .sp-exnote { font-size: 12.5px; line-height: 1.7; color: var(--ink); margin-bottom: 10px; }
+  .sp-exbtn {
+    display: block; width: 100%; min-height: 48px;
+    font-size: 15px; font-weight: 700;
+    color: #ffffff; background: #156082;
+    border: 1px solid #156082; border-radius: 10px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sp-exbtn:active { background: #0f4a64; }
+  .sp-exmsg {
+    font-size: 12.5px; line-height: 1.8; color: var(--ink);
+    margin-top: 10px; padding: 9px 10px;
+    background: #ffffff; border: 1px solid var(--line);
+    border-radius: 8px; word-break: break-all;
+  }
   .sp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
   .sp-chip {
     font-size: 12px;
@@ -1287,7 +1314,62 @@ function spRenderStaffList() {
         + '<div class="sp-rowcount">&rsaquo;</div></button>';
     });
   }
+  html += spExportHtml();          // ★v10：一覧のいちばん下に書き出し欄を足す
   panel.innerHTML = html;
+}
+
+// ★v10は「試験」。中身は一切変えず、いまの index.html をそのまま落とすだけ。
+// 一覧を描き直すたびに作り直されるので、消えたり重なったりしない。
+function spExportHtml() {
+  return '<div class="sp-export">'
+    + '<div class="sp-exhead">書き出しの試験（管理用）</div>'
+    + '<div class="sp-exnote">この版は<b>落とせるかどうかを確かめるだけ</b>です。'
+    + 'アプリの中身は変わりません。</div>'
+    + '<button class="sp-exbtn" onclick="spExportSelf(this)">index.html を書き出す</button>'
+    + '<div class="sp-exmsg" id="spExportMsg">押すと、ここに結果が出ます。</div>'
+    + '</div>';
+}
+
+// うまくいかない時に原因が分かるよう、途中の様子を必ず画面に出す（憲法 §0.9）
+function spExportSelf(btn) {
+  var msg = document.getElementById('spExportMsg');
+  if (!msg) return;
+  function say(t) { msg.innerHTML = t; }
+
+  btn.disabled = true;
+  say('①いまの index.html を読んでいます…');
+
+  fetch('./index.html', { cache: 'no-store' })
+    .then(function (res) {
+      if (!res.ok) throw new Error('読めませんでした（' + res.status + '）');
+      return res.text();
+    })
+    .then(function (text) {
+      var moji = text.length.toLocaleString();
+      say('②読めました：<b>' + moji + ' 文字</b><br>③保存を試みます…');
+      var blob = new Blob([text], { type: 'text/html' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'index.html';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () {
+        if (a.parentNode) a.parentNode.removeChild(a);
+        URL.revokeObjectURL(url);
+        say('②読めました：<b>' + moji + ' 文字</b>'
+          + '<br>③保存の合図まで進みました。'
+          + '<br><b>★「ダウンロード」や「ファイルに保存」は出ましたか？</b>'
+          + '<br>出なければ、この方法は使えません。その旨をお知らせください。');
+        btn.disabled = false;
+      }, 1200);
+    })
+    .catch(function (e) {
+      say('<b>★うまくいきませんでした。</b><br>'
+        + spEsc(String(e && e.message ? e.message : e)));
+      btn.disabled = false;
+    });
 }
 
 // ---- タブ切り替え ----
