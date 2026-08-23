@@ -718,6 +718,21 @@
     background: #ffffff; border: 1px solid var(--line);
     border-radius: 8px; word-break: break-all;
   }
+  /* ★v13：端末に控えてある下書きのお知らせ。専用に作る（憲法 §3③・§7.8） */
+  .sp-draft {
+    background: #fdf1e7; border: 1px solid var(--accent-soft);
+    border-radius: 9px; padding: 10px 12px; margin-bottom: 11px;
+  }
+  .sp-drafttx { font-size: 12.5px; line-height: 1.7; color: var(--ink); }
+  /* ★下地 #fdf1e7 に対して 5.35。--accent(#b5542f) だと 4.43 で基準未満だった（憲法 §7.6） */
+  .sp-drafttx b { color: #a34926; }
+  .sp-draftbtn {
+    display: block; margin-top: 9px; min-height: 44px; padding: 0 14px;
+    font-size: 13px; font-weight: 700; font-family: inherit;
+    color: var(--ink); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 9px;
+    -webkit-tap-highlight-color: transparent;
+  }
   .sp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
   .sp-chip {
     font-size: 12px;
@@ -1430,10 +1445,20 @@ function spRenderStaffList() {
 // 一覧を描き直すたびに作り直されるので、消えたり重なったりしない。
 function spExportHtml() {
   const note = spEditedNote();
+  // ★v13：下書きがあるときだけ、この枠を出す。無いときは v12 と同じ見た目
+  const draft = note
+    ? '<div class="sp-draft"><div class="sp-drafttx">'
+      + '<b>★直した内容を、この端末に控えてあります</b><br>'
+      + note + '<br>'
+      + 'アプリを閉じても消えません。次に開いたときも、この状態です。'
+      + '</div>'
+      + '<button class="sp-draftbtn" onclick="spDraftDrop()">下書きを捨てて、元の評価に戻す</button>'
+      + '</div>'
+    : '';
   return '<div class="sp-export">'
     + '<div class="sp-exhead">書き出し（管理用）</div>'
+    + draft
     + '<div class="sp-exnote">'
-    + (note ? note + '<br>' : '')
     + 'いまの評価をまとめて書き出します。<b>直した内容も入ります。</b>'
     + '落とした index.html を GitHub に上げてください。</div>'
     + '<button class="sp-exbtn" onclick="spExportSelf(this)">まとめて書き出す</button>'
@@ -1735,6 +1760,91 @@ Object.keys(STAFF_PROFILES).forEach(function (n) {
   if (p && p.groups) SP_ORIGINAL[n] = p.groups.map(function (g) { return g[1].map(function (it) { return it[1]; }); });
 });
 
+// ===================== v13：下書きをこの端末に控える =====================
+// ★親方のお困りごと：アプリを落とすと、直した内容が消えていた。
+// ★うまくいかないときは、黙って「控えなし」に落ちる（憲法 §0.5⑪③）。
+//   読めない・書けない・いっぱいで書けない、どの場合も
+//   前からある表示が消えたり、嘘の値が出たりしないこと。
+const SP_DRAFT_KEY = 'kyushu-map-eval-draft-v1';
+
+// 五角形（main）は細目から必ず計算し直す。手で入れさせない（憲法 §20.23）
+function spRecalcMain(name) {
+  const p = STAFF_PROFILES[name];
+  if (!p || !p.groups || !p.main) return;
+  p.groups.forEach(function (g, gi) {
+    let sum = 0;
+    g[1].forEach(function (it) { sum += it[1]; });
+    if (p.main[gi]) p.main[gi][1] = spConv(sum);
+  });
+}
+
+// いま元と違う方だけを集めて、端末に控える
+function spDraftSave() {
+  try {
+    const out = {};
+    let n = 0;
+    Object.keys(SP_ORIGINAL).forEach(function (name) {
+      if (!spIsEdited(name)) return;
+      out[name] = STAFF_PROFILES[name].groups.map(function (g) {
+        return g[1].map(function (it) { return it[1]; });
+      });
+      n++;
+    });
+    if (n === 0) window.localStorage.removeItem(SP_DRAFT_KEY);
+    else window.localStorage.setItem(SP_DRAFT_KEY, JSON.stringify(out));
+  } catch (e) { /* 控えられなくても、いままでどおり動く */ }
+}
+
+// 起動したときに、控えを読んで当てはめる
+function spDraftLoad() {
+  let obj = null;
+  try {
+    const s = window.localStorage.getItem(SP_DRAFT_KEY);
+    if (!s) return;
+    obj = JSON.parse(s);
+  } catch (e) { return; }
+  if (!obj || typeof obj !== 'object') return;
+  Object.keys(obj).forEach(function (name) {
+    const p = STAFF_PROFILES[name], o = SP_ORIGINAL[name], d = obj[name];
+    // ★形が合わないものは当てはめない。項目が増減した版で開いたときの用心
+    if (!p || !o || !Array.isArray(d) || d.length !== o.length) return;
+    for (let gi = 0; gi < o.length; gi++) {
+      if (!Array.isArray(d[gi]) || d[gi].length !== o[gi].length) return;
+      for (let ii = 0; ii < o[gi].length; ii++) {
+        const v = d[gi][ii];
+        if (typeof v !== 'number' || v < 1 || v > 5 || v !== Math.floor(v)) return;
+      }
+    }
+    for (let gi = 0; gi < o.length; gi++) {
+      for (let ii = 0; ii < o[gi].length; ii++) p.groups[gi][1][ii][1] = d[gi][ii];
+    }
+    spRecalcMain(name);
+    if (spIsEdited(name)) spEditedNames.add(name);
+  });
+}
+
+// 控えを捨てて、ファイルに書いてある評価に戻す（取り消せないので確認を置く・憲法 §2）
+function spDraftDrop() {
+  if (!spEditedNames.size) return;
+  if (!window.confirm('この端末に控えてある下書き（' + spEditedNames.size
+      + '名ぶん）を捨てて、元の評価に戻します。よろしいですか？')) return;
+  Object.keys(SP_ORIGINAL).forEach(function (name) {
+    const p = STAFF_PROFILES[name], o = SP_ORIGINAL[name];
+    if (!p || !p.groups) return;
+    o.forEach(function (g, gi) {
+      g.forEach(function (v, ii) { p.groups[gi][1][ii][1] = v; });
+    });
+    spRecalcMain(name);
+  });
+  spEditedNames.clear();
+  try { window.localStorage.removeItem(SP_DRAFT_KEY); } catch (e) {}
+  // ★データを直したら、それを出している場所を描き直す（憲法 §20.26）
+  const panel = document.getElementById('spStaffPanel');
+  const sc = panel ? panel.scrollTop : 0;
+  spRenderStaffList();
+  if (panel) panel.scrollTop = sc;
+}
+
 // その方が元と変わっているか
 function spIsEdited(name) {
   const p = STAFF_PROFILES[name], o = SP_ORIGINAL[name];
@@ -1776,6 +1886,7 @@ function spEditClose() {
   if (name) {
     // 元と変わっていれば控えに入れ、元に戻っていれば控えから外す
     if (spIsEdited(name)) spEditedNames.add(name); else spEditedNames.delete(name);
+    spDraftSave();   // ★v13
     // ★v12で直した所：カードを描き直さないと、直した値が画面に出ない。
     //   （データは変わっているのに、五角形も丸の数も古いままだった）
     spShowCard(name);
@@ -1797,10 +1908,10 @@ function spEditHtml(name) {
     + '<span>言葉を選ぶだけ。五角形は自動で決まります</span></div></div>';
   h += '<div class="sp-edbody">';
   h += '<div class="sp-ednote">'
-    + '<b>何人でも続けて直せます。</b>書き出しは、ぜんぶ直し終わってから<b>1回だけ</b>で結構です。'
-    + '<br>直した内容は、みんなの画面にはまだ出ていません。'
-    + '最後に「まとめて書き出す」で index.html を落として、GitHub に上げてください。'
-    + '<br>★アプリを閉じると、直した内容は消えます。</div>';
+    + '<b>何人でも続けて直せます。</b>直し終わったら、下の「&#10003; 直し終わった」を押してください。'
+    + '<br>★<b>アプリを閉じても、直した内容はこの端末に控えてあります。</b>'
+    + '<br>みんなの画面に出すには、<b>担当者一覧のいちばん下</b>にある「まとめて書き出す」で'
+    + ' index.html を落として、GitHub に上げてください。</div>';
   (p.groups || []).forEach(function (g, gi) {
     const gname = g[0], items = g[1], words = spWords(gname);
     h += '<div class="sp-edgname">' + spEsc(gname)
@@ -1820,11 +1931,11 @@ function spEditHtml(name) {
   const note = spEditedNote();
   h += '<div class="sp-edmsg" id="spEdMsg">'
     + (note ? note + '<br>' : '')
-    + '「まとめて書き出す」を押すと、ここに結果が出ます。</div>';
+    + 'ここに、直した人数やお知らせが出ます。</div>';
   h += '</div>';
   h += '<div class="sp-edfoot">'
     + '<button class="sp-edundo" onclick="spEditUndo()">元の評価に戻す</button>'
-    + '<button class="sp-edsave" onclick="spEditSave(this)">まとめて書き出す</button>'
+    + '<button class="sp-edsave" onclick="spEditClose()">&#10003; 直し終わった</button>'
     + '</div>';
   return h;
 }
@@ -1833,6 +1944,7 @@ function spEditPick(gi, ii, v) {
   const p = STAFF_PROFILES[spEditName];
   p.groups[gi][1][ii][1] = parseInt(v, 10);
   spEditRefresh();
+  spDraftSave();   // ★v13：選ぶたびに端末へ控える
 }
 
 // 細目 → 合計 → 五角形 を、1本の道すじで作り直す（同じ計算を2か所に書かない・憲法 §0.5②）
@@ -1875,6 +1987,7 @@ function spEditUndo() {
   });
   spEditBase = o.map(function (g) { return g.slice(); });
   spEditedNames.delete(name);
+  spDraftSave();   // ★v13
   spEditRefresh();
   const m = document.getElementById('spEdMsg');
   if (m) m.innerHTML = '元の評価に戻しました。'
@@ -1898,13 +2011,6 @@ function spBuildHtml(text) {
     + '\n' + text.slice(j);
 }
 
-function spEditSave(btn) {
-  var msg = document.getElementById('spEdMsg');
-  btn.disabled = true;
-  spExportRun(function (t) { if (msg) msg.innerHTML = t; },
-              function () { btn.disabled = false; });
-}
-
 function spCloseCard(e) {
   if (e && e.target && e.target.id !== 'spOverlay' && e.type === 'click' && e.currentTarget !== e.target) return;
   // ★v11：深い段から先に閉じる（憲法 §7.4）。編集画面が開いていたら、カードは閉じない。
@@ -1918,6 +2024,8 @@ document.addEventListener('keydown', function (e) {
   if (document.getElementById('spEdit').classList.contains('show')) { spEditClose(); return; }
   document.getElementById('spOverlay').classList.remove('show');
 });
+
+spDraftLoad();   // ★v13：描く前に、端末の控えを当てはめる
 
 spRenderStaffList();
 
