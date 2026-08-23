@@ -352,7 +352,9 @@
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
-    bottom: calc(74px + env(safe-area-inset-bottom));
+    /* ★v14：＋−ボタン（下から16px・高さ144px＝44px×3＋すきま6px×2）の上に置く。
+       74px のままだと、この帯の右端が＋−の下に潜り込んで読めなかった（憲法 §7.5） */
+    bottom: calc(168px + env(safe-area-inset-bottom));
     background: rgba(28, 43, 51, 0.86);
     color: #fff;
     font-size: 12px;
@@ -791,7 +793,7 @@
       <svg id="mapSvg"></svg>
       <div id="labelOverlay"></div>
       <div id="tooltip"></div>
-      <div id="overviewHint">県をタッチして詳細表示 / 市町村にカーソルを合わせると担当者名を表示</div>
+      <div id="overviewHint">県をタッチすると、市町村ごとの担当者が見られます</div>
       <div id="legendOverlay">
         <div class="legend-title">優先順位1 担当者</div>
         <div id="legendList"></div>
