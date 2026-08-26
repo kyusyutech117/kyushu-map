@@ -71,8 +71,9 @@
     background: var(--panel);
     border: 1px solid var(--line);
     color: var(--ink);
-    padding: 7px 14px 7px 10px;
-    border-radius: 20px;
+    /* ★v16：上下を 7px→12px に。18(文字)+24+2(枠)=44px で、指の当たる大きさの基準に届く（憲法 §7.6） */
+    padding: 12px 14px 12px 10px;
+    border-radius: 22px;
     font-size: 13px;
     cursor: pointer;
     font-family: inherit;
@@ -548,7 +549,10 @@
     flex-shrink: 0;
   }
   .sp-cardinfo { flex: 1; min-width: 0; }
-  .sp-cardname { font-size: 19px; font-weight: 700; line-height: 1.3; }
+    /* ★v16 の padding-right は、上の×を44pxにしたためセットで必要。
+     無いと、社外の方の長いお名前が×に食い込む（12px→22px に悪化する）。
+     40px 以上にすると、320px の狭い端末で氏名が総崩れ（2行が3名→19名）になるので 32px が上限。 */
+  .sp-cardname { font-size: 19px; font-weight: 700; line-height: 1.3; padding-right: 32px; }
   .sp-cardkana { font-size: 11px; color: var(--muted); margin-top: 1px; }
   .sp-cardmeta { font-size: 12.5px; color: var(--muted); margin-top: 5px; line-height: 1.6; }
   .sp-grade {
@@ -560,12 +564,13 @@
   }
   #spCardClose {
     position: absolute;
-    top: 10px; right: 10px;
-    width: 34px; height: 34px;
+    /* ★v16：34px→44px（§7.6）。top は 10→8px。下の「編集」ボタンとのすきまを 2px 残すため */
+    top: 8px; right: 10px;
+    width: 44px; height: 44px;
     border: none; border-radius: 50%;
     background: rgba(0, 0, 0, 0.06);
     color: var(--muted);
-    font-size: 18px; line-height: 1;
+    font-size: 20px; line-height: 1;
     cursor: pointer;
   }
   .sp-cardbody {
@@ -1311,7 +1316,21 @@ function highlightStaff(staff, on) {
   });
 }
 
-function showOverview() { renderOverview(); }
+function showOverview() {
+  // ★v15：担当者一覧を見ているとき・検索中は、地図が隠れていて幅が 0 になっている。
+  //   そのまま renderOverview() を呼ぶと入口の守り（v5 の対策）で帰ってしまい、
+  //   「戻る」を押したことが消えていた。戻る道はこの1本に集める（憲法 §7.4）。
+  spNeedRedraw = false;                       // 詳細の描き直し待ちが残っていると、先に詳細が描かれる
+  const si = document.getElementById('spSearchInput');
+  if (si && si.value.trim() !== '') spClearSearch();   // 検索中なら先にやめる
+  if (spCurrentTab !== 'map') spSwitchTab('map');      // 一覧なら地図に切り替える
+  if (!spMapVisible()) {
+    // display を戻した直後は、まだ大きさが決まっていない。1コマ待ってから描く（憲法 §20.7）
+    requestAnimationFrame(function () { renderOverview(); });
+    return;
+  }
+  renderOverview();
+}
 
 const SP_HOTSPOTS = {"福岡県":[{"n":"オクト・ミライ：牝小路 真徳","l":72.313,"t":5.707,"w":26.935,"h":1.751},{"n":"内田 尚汰","l":72.313,"t":7.266,"w":26.935,"h":1.751},{"n":"宮本 秀一郎","l":72.313,"t":8.825,"w":26.935,"h":1.751},{"n":"山岡 敬幸","l":72.313,"t":10.384,"w":26.935,"h":1.751},{"n":"毛利 健二","l":72.313,"t":11.942,"w":26.935,"h":1.751},{"n":"水野 伸彦","l":72.313,"t":13.501,"w":26.935,"h":1.751},{"n":"永峰 一騎","l":72.313,"t":15.06,"w":26.935,"h":1.751},{"n":"西 雄三","l":72.313,"t":16.619,"w":26.935,"h":1.751},{"n":"野田 伸也","l":72.313,"t":18.177,"w":26.935,"h":1.751},{"n":"ＡＯＢＩ　ＴＥＣＨ：河野 光浩F","l":72.313,"t":19.736,"w":26.935,"h":1.751},{"n":"坂口 浩一","l":72.313,"t":21.295,"w":26.935,"h":1.751}],"佐賀県":[{"n":"志水 亮太","l":84.632,"t":5.707,"w":14.649,"h":1.751},{"n":"水野 伸彦","l":84.632,"t":7.266,"w":14.649,"h":1.751},{"n":"野田 伸也","l":84.632,"t":8.825,"w":14.649,"h":1.751}],"長崎県":[{"n":"坂口 浩一","l":84.774,"t":5.707,"w":14.509,"h":1.751},{"n":"宮﨑 大和","l":84.774,"t":7.266,"w":14.509,"h":1.751},{"n":"志水 亮太","l":84.774,"t":8.825,"w":14.509,"h":1.751}],"熊本県":[{"n":"オクト・ミライ：牝小路 真徳","l":75.051,"t":6.469,"w":24.26,"h":2.001},{"n":"上野 好文","l":75.051,"t":8.251,"w":24.26,"h":2.001},{"n":"川原 淳","l":75.051,"t":10.033,"w":24.26,"h":2.001}],"大分県":[{"n":"宮本 秀一郎","l":84.45,"t":5.707,"w":14.901,"h":1.751},{"n":"荒金孝輔","l":84.45,"t":7.266,"w":14.901,"h":1.751}],"宮崎県":[{"n":"小薗 弘和","l":79.35,"t":5.707,"w":19.624,"h":1.751}],"鹿児島県":[{"n":"米澤 一寿","l":84.367,"t":5.707,"w":14.939,"h":1.751},{"n":"黒木 邦圭","l":84.367,"t":7.266,"w":14.939,"h":1.751}],"沖縄県":[{"n":"德永 真行","l":84.828,"t":7.526,"w":14.501,"h":2.328},{"n":"花谷 和樹","l":84.828,"t":9.598,"w":14.501,"h":2.328}]};
 
